@@ -8,15 +8,17 @@ import time
 
 BIN_DIR = 'bin'  # Directory where the binary files are located
 
-
 class ESPFlasherApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ESP32 Flasher")
         self.root.geometry("600x400")
+
         self.create_widgets()
         self.refresh_ports()
         self.refresh_bins()
+
+        # Start a thread to update COM ports dynamically
         threading.Thread(target=self.dynamic_port_update, daemon=True).start()
 
     def create_widgets(self):
@@ -81,31 +83,52 @@ class ESPFlasherApp:
     def refresh_ports(self):
         ports = serial.tools.list_ports.comports()
         port_list = [f"{port.device} - {port.description}" for port in ports]
-        self.update_combo(self.port_combo, port_list)
+        current_selection = self.port_combo.get()
+        self.port_combo['values'] = port_list
+        if current_selection in port_list:
+            self.port_combo.set(current_selection)
+        elif port_list:
+            self.port_combo.current(0)
+        else:
+            self.port_combo.set('')
 
     def refresh_bins(self):
         if not os.path.exists(BIN_DIR):
             os.makedirs(BIN_DIR)
         files = os.listdir(BIN_DIR)
 
-        app_bins = [f for f in files if f.endswith('.bin') and 'bootloader' not in f.lower() and 'partition' not in f.lower()]
-        self.update_combo(self.bin_combo, app_bins)
-
-        bootloader_bins = [f for f in files if 'bootloader' in f.lower() and f.endswith('.bin')]
-        self.update_combo(self.bootloader_combo, bootloader_bins)
-
-        partition_bins = [f for f in files if 'partition' in f.lower() and f.endswith('.bin')]
-        self.update_combo(self.partition_combo, partition_bins)
-
-    def update_combo(self, combo, values):
-        current_selection = combo.get()
-        combo['values'] = values
-        if current_selection in values:
-            combo.set(current_selection)
-        elif values:
-            combo.current(0)
+        # Application binary files (excluding bootloader and partition files)
+        app_bins = [os.path.join(BIN_DIR, f) for f in files if f.endswith('.bin') and 'bootloader' not in f.lower() and 'partition' not in f.lower()]
+        current_app_selection = self.bin_combo.get()
+        self.bin_combo['values'] = app_bins
+        if current_app_selection in app_bins:
+            self.bin_combo.set(current_app_selection)
+        elif app_bins:
+            self.bin_combo.current(0)
         else:
-            combo.set('')
+            self.bin_combo.set('')
+
+        # Bootloader binary files
+        bootloader_bins = [os.path.join(BIN_DIR, f) for f in files if 'bootloader' in f.lower() and f.endswith('.bin')]
+        current_bootloader_selection = self.bootloader_combo.get()
+        self.bootloader_combo['values'] = bootloader_bins
+        if current_bootloader_selection in bootloader_bins:
+            self.bootloader_combo.set(current_bootloader_selection)
+        elif bootloader_bins:
+            self.bootloader_combo.current(0)
+        else:
+            self.bootloader_combo.set('')
+
+        # Partition binary files
+        partition_bins = [os.path.join(BIN_DIR, f) for f in files if 'partition' in f.lower() and f.endswith('.bin')]
+        current_partition_selection = self.partition_combo.get()
+        self.partition_combo['values'] = partition_bins
+        if current_partition_selection in partition_bins:
+            self.partition_combo.set(current_partition_selection)
+        elif partition_bins:
+            self.partition_combo.current(0)
+        else:
+            self.partition_combo.set('')
 
     def dynamic_port_update(self):
         previous_ports = set()
@@ -131,15 +154,26 @@ class ESPFlasherApp:
 
         threading.Thread(
             target=self.run_esptool,
-            args=(selected_port_desc.split(' - ')[0], selected_bin, selected_bootloader_bin, selected_partition_bin),
+            args=(
+                selected_port_desc.split(' - ')[0],
+                selected_bin,
+                selected_bootloader_bin,
+                selected_partition_bin
+            ),
             daemon=True
         ).start()
 
     def run_esptool(self, port, app_bin_file, bootloader_file, partitions_file):
         try:
             self.update_status("Flashing in progress...")
-            time.sleep(2)
+            time.sleep(2)  # Short delay to allow user to press the BOOT button
 
+            # Ensure file paths are absolute
+            app_bin_file = os.path.abspath(app_bin_file)
+            bootloader_file = os.path.abspath(bootloader_file)
+            partitions_file = os.path.abspath(partitions_file)
+
+            # esptool command
             esptool_args = [
                 '--chip', 'esp32',
                 '--port', port,
@@ -153,6 +187,7 @@ class ESPFlasherApp:
             ]
 
             esptool.main(esptool_args)
+
             self.update_status("Flashing completed successfully!")
             messagebox.showinfo("Success", "Flashing completed successfully!")
 
@@ -168,7 +203,6 @@ class ESPFlasherApp:
 
     def update_status(self, message):
         self.status_label.config(text=message)
-
 
 if __name__ == "__main__":
     root = tk.Tk()
