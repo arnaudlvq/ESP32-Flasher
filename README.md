@@ -1,7 +1,7 @@
 # Easy Production Proof ESP32 Flasher GUI for Windows
 
 
-![image](https://github.com/user-attachments/assets/f810729c-ffcb-4790-9855-b1d0cd0c1a67)
+![image](https://github.com/user-attachments/assets/e6e47eca-333e-478f-a35c-4a3165678c2a)
 
 
 Welcome to the **ESP32 Flasher GUI Application**—a simple, fast, and user-friendly tool designed for Windows environments to streamline the flashing process of ESP32 devices. This application is perfect for production environments where efficiency and ease of use are paramount.
@@ -41,7 +41,7 @@ First, you need to generate the necessary binary files from your Arduino project
 
 1. Create a folder named `bin` at the root of the ESP32 Flasher application directory.
 2. Place the following binary files into the `bin` folder:
-   - **Application Binary**: `*.ino.bin`
+   - **Main Binary**: `*.ino.bin`
    - **Bootloader Binary**: `*.bootloader.bin`
    - **Partition Binary**: `*.partitions.bin`
 
