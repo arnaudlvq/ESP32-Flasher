@@ -1,11 +1,13 @@
-# ESP32 Flasher GUI Application
+# Easy Production Proof ESP32 Flasher GUI for Windows
+
+
+![image](https://github.com/user-attachments/assets/f810729c-ffcb-4790-9855-b1d0cd0c1a67)
+
 
 Welcome to the **ESP32 Flasher GUI Application**—a simple, fast, and user-friendly tool designed for Windows environments to streamline the flashing process of ESP32 devices. This application is perfect for production environments where efficiency and ease of use are paramount.
 
 ## Table of Contents
 
-- [Features](#features)
-- [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
   - [1. Export Compiled Binaries](#1-export-compiled-binaries)
   - [2. Prepare the `bin` Directory](#2-prepare-the-bin-directory)
@@ -14,25 +16,6 @@ Welcome to the **ESP32 Flasher GUI Application**—a simple, fast, and user-frie
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
-
----
-
-## Features
-
-- **User-Friendly GUI**: Intuitive interface built with Tkinter for ease of use.
-- **Dynamic Port Detection**: Automatically detects available COM ports in real-time.
-- **Customizable Binary Selection**: Allows selection of application, bootloader, and partition binary files.
-- **Fast Flashing**: Utilizes high baud rates for quick flashing operations.
-- **Production-Ready**: Ideal for environments where multiple devices need to be flashed efficiently.
-
----
-
-## Prerequisites
-
-- **Operating System**: Windows
-- **Python**: Version 3.x installed
-- **Arduino IDE**: For compiling and exporting binaries
-- **ESP32 Board**: The target device for flashing
 
 ---
 
@@ -75,27 +58,20 @@ Ensure the following Python libraries are installed:
 **Installation Commands**:
 
 ```bash
-pip install pyserial
-pip install esptool
+pip install pyserial esptool
 ```
 
 ### 4. Run the Application
 
 To start using the ESP32 Flasher GUI Application:
 
-1. **Run the Script**:
+**Run the Script**:
    - Open a terminal or command prompt.
-   - Navigate to the directory where the `esp32_flasher.py` script is located.
+   - Navigate to the directory where the `flasher.py` script is located.
    - Run the script using:
      ```bash
-     python esp32_flasher.py
+     python flasher.py
      ```
-   - Alternatively, you can double-click the `esp32_flasher.py` file to launch it (if your system is configured to run `.py` files with Python).
-
-2. **Launch the GUI**:
-   - The graphical interface will open, allowing you to interact with the application.
-
----
 
 ## Usage
 
