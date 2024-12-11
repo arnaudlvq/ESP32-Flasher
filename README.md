@@ -86,7 +86,7 @@ To start using the ESP32 Flasher GUI Application:
 
 3. **Flash ESP32**:
    - Click the **"Flash ESP32"** button to start the flashing process.
-   - When prompted, hold the **BOOT** button on your ESP32 device to put it in bootloader mode.
+   - When prompted, hold the **BOOT** button followed by a click on the **EN** button (while holding **BOOT**) on your ESP32 device to put it in bootloader mode.
    - The status will be displayed in the GUI, indicating the progress and success of the operation.
 
 4. **Completion**:
