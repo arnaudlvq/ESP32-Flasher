@@ -9,7 +9,7 @@ This repository provides two versions of the flasher:
 ### PySide6 Version (Recommended for macOS App)
 <img width="698" height="627" alt="PySide6 Flasher" src="https://github.com/user-attachments/assets/972886bf-4ec5-49f6-99cf-00cc8b6dafe8" />
 
-![Pyside6 Flasher]([https://github.com/user-attachments/assets/e6e47eca-333e-478f-a35c-4a3165678c2a](https://github.com/user-attachments/assets/972886bf-4ec5-49f6-99cf-00cc8b6dafe8))
+![Pyside6 Flasher](https://github.com/user-attachments/assets/972886bf-4ec5-49f6-99cf-00cc8b6dafe8)
 
 ### Tkinter Version (Lightweight)
 ![Tkinter Flasher](https://github.com/user-attachments/assets/e6e47eca-333e-478f-a35c-4a3165678c2a)
