@@ -1,4 +1,4 @@
-# Easy Production Proof ESP32 Flasher (PySide6 & Tkinter) + MacOS APP
+# Easy Production Proof ESP32 Flasher (PySide6 or Tkinter) + MacOS APP
 
 A simple, user-friendly GUI application for flashing ESP32 microcontrollers on macOS, Windows, and Linux.
 
@@ -99,15 +99,17 @@ The most reliable way to get these is from the **Arduino IDE**.
         - `boot_app0.bin` (Crucial for OTA-enabled partitions, tells the ESP32 which partition to boot first).
         - `your_sketch.ino.bin` (your compiled application).
 
+4. **(Alternative) Use the 'Export Compiled Binairy' of Arduino IDE**
+    - It'll generated the corrects binaries. But you will still need the `boot_app0.bin` (at least if using OTA).
 ---
 
 ## Usage
 
 1.  **Launch the Application**: Either by opening `Flasher.app` or running `python flasher.py` / `python flasher_tk.py`.
 2.  **Select COM Port**: The application will automatically detect and list available serial ports. Choose the one corresponding to your ESP32.
-3.  **Select Binary Files** (Tkinter version only): The Tkinter GUI allows you to manually select your binary files. The PySide6 version automatically uses the files from the `bin` folder.
-4.  **Flash ESP32**: Click the **"Flash ESP32"** button.
-5.  **Enter Bootloader Mode**: If prompted, hold the **BOOT** button on your ESP32, press and release the **EN** (or RST) button, and then release **BOOT**. *Note: Many modern ESP32 boards handle this automatically.*
+3.  **Select Binary Files** : The GUI allows you to manually select your binary files. It automatically tries to use the files from the `bin` folder.
+4.  **Enter Bootloader Mode**: Hold the **BOOT** button on your ESP32, press and release the **EN** (or RST) button, and then release **BOOT**. *Note: Many modern ESP32 boards handle this automatically.*
+5.  **Flash ESP32**: Click the **"Flash ESP32"** button.
 6.  **Monitor Progress**: The application will display the flashing status. A confirmation message will appear upon completion.
 
 ---
@@ -141,6 +143,7 @@ If you need to support a different ESP32 chip (e.g., `esp32s3`), change firmware
 ### Building the macOS Application
 
 To create a new standalone `Flasher.app` after making changes:
+(I recommend : always use an env)
 
 1.  **Install PyInstaller**:
     ```bash
@@ -152,6 +155,9 @@ To create a new standalone `Flasher.app` after making changes:
     pyinstaller macOS_app_build/Flasher.spec
     ```
 4.  The newly built `Flasher.app` will be in the `dist` folder.
+
+
+then go to [2. Using the Pre-built macOS App](#2-using-the-pre-built-macos-app)
 
 ---
 
