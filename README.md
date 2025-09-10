@@ -15,8 +15,8 @@ This repository provides two versions of the flasher:
 ## Table of Contents
 
 - [Installation](#installation)
-  - [1. Using the Pre-built macOS App](#1-using-the-pre-built-macos-app)
-  - [2. Running from Source (All Platforms)](#2-running-from-source-all-platforms)
+  - [1. Running from Source (All Platforms)](#1-running-from-source-all-platforms)
+  - [2. Using the Pre-built macOS App](#2-using-the-pre-built-macos-app)
 - [Getting Your Binary Files](#getting-your-binary-files)
 - [Usage](#usage)
 - [For Developers](#for-developers)
