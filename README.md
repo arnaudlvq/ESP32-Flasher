@@ -1,4 +1,6 @@
 # Easy Production Proof ESP32 Flasher (PySide6 or Tkinter) + MacOS APP
+<img width="100" height="100" alt="Flasher Icon" src="https://github.com/user-attachments/assets/47161818-d781-4298-b201-a0daceb768a9" />
+
 
 A simple, user-friendly GUI application for flashing ESP32 microcontrollers on macOS, Windows, and Linux.
 
@@ -8,8 +10,6 @@ This repository provides two versions of the flasher:
 
 ### PySide6 Version (Recommended for macOS App)
 <img width="698" height="627" alt="PySide6 Flasher" src="https://github.com/user-attachments/assets/972886bf-4ec5-49f6-99cf-00cc8b6dafe8" />
-
-![Pyside6 Flasher](https://github.com/user-attachments/assets/972886bf-4ec5-49f6-99cf-00cc8b6dafe8)
 
 ### Tkinter Version (Lightweight)
 ![Tkinter Flasher](https://github.com/user-attachments/assets/e6e47eca-333e-478f-a35c-4a3165678c2a)
