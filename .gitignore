@@ -1,1 +1,3 @@
-*.bin
+build/
+.DS_Store
+macOS_app_build/dist/Flasher/

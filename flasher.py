@@ -1,210 +1,327 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-import serial.tools.list_ports
-import threading
-import esptool
+import sys
 import os
 import time
+import serial.tools.list_ports
+import subprocess
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QGroupBox, QLabel, QComboBox, QPushButton, QProgressBar, QMessageBox,
+    QFileDialog, QTextEdit
+)
+from PySide6.QtCore import QThread, Signal, QObject, Slot
+from PySide6.QtGui import QFont
 
-BIN_DIR = 'bin'  # Directory where the binary files are located
+# Determine the base path for resources (like the 'bin' directory)
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    # Running as a bundled app (.app)
+    # The path needs to go up from .../Flasher.app/Contents/MacOS/Flasher
+    base_path = os.path.abspath(os.path.join(os.path.dirname(sys.executable), '..', '..', '..'))
+else:
+    # Running as a normal python script
+    base_path = os.path.dirname(os.path.abspath(__file__))
 
-class ESPFlasherApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("ESP32 Flasher")
-        self.root.geometry("600x400")
+BIN_DIR = os.path.join(base_path, 'bin')  # Directory where the binary files are located
+
+class EsptoolWorker(QObject):
+    """
+    Worker thread for running esptool as a subprocess to avoid freezing the GUI.
+    """
+    output = Signal(str)
+    finished = Signal(int)  # Emits the exit code
+
+    def __init__(self, args):
+        super().__init__()
+        self.args = args
+        self._is_running = True
+
+    def run(self):
+        """
+        Executes the esptool command in a subprocess.
+        """
+        try:
+            # Start the subprocess
+            self.process = subprocess.Popen(
+                self.args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+            )
+
+            # Read output line by line in real-time
+            for line in iter(self.process.stdout.readline, ''):
+                if not self._is_running:
+                    self.process.terminate()
+                    break
+                self.output.emit(line.strip())
+            
+            self.process.stdout.close()
+            return_code = self.process.wait()
+            self.finished.emit(return_code)
+
+        except FileNotFoundError:
+            self.output.emit("Error: 'esptool' command not found.")
+            self.output.emit("Please ensure esptool is installed in your Python environment.")
+            self.finished.emit(1)
+        except Exception as e:
+            self.output.emit(f"An error occurred while running esptool:\n{str(e)}")
+            self.finished.emit(1)
+
+    def stop(self):
+        """Stops the running process."""
+        self._is_running = False
+
+
+class PortMonitor(QObject):
+    """Monitors serial port connections in a background thread."""
+    ports_changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self._running = True
+        self._previous_ports = set()
+
+    def run(self):
+        while self._running:
+            try:
+                ports = set(p.device for p in serial.tools.list_ports.comports())
+                if ports != self._previous_ports:
+                    self._previous_ports = ports
+                    self.ports_changed.emit()
+            except Exception:
+                # Ignore errors during port scanning
+                pass
+            time.sleep(1)
+
+    def stop(self):
+        self._running = False
+
+
+class ESPFlasherApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("ESP32 Flasher")
+        self.setGeometry(100, 100, 700, 600)
+
+        self.esptool_thread = None
+        self.esptool_worker = None
 
         self.create_widgets()
         self.refresh_ports()
         self.refresh_bins()
 
-        # Start a thread to update COM ports dynamically
-        threading.Thread(target=self.dynamic_port_update, daemon=True).start()
+        self.start_port_monitor()
 
     def create_widgets(self):
-        # Main container frame
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QVBoxLayout(main_widget)
 
-        # Port selection frame
-        port_frame = ttk.LabelFrame(main_frame, text="Select COM Port", padding="10")
-        port_frame.pack(fill=tk.X, pady=10)
+        # Port selection
+        port_group = QGroupBox("Select COM Port")
+        port_layout = QHBoxLayout(port_group)
+        self.port_combo = QComboBox()
+        self.port_combo.setMinimumWidth(300)
+        refresh_ports_button = QPushButton("Refresh")
+        refresh_ports_button.clicked.connect(self.refresh_ports)
+        port_layout.addWidget(self.port_combo)
+        port_layout.addWidget(refresh_ports_button)
+        main_layout.addWidget(port_group)
 
-        self.port_combo = ttk.Combobox(port_frame, values=[], state="readonly", width=40)
-        self.port_combo.pack(side=tk.LEFT, padx=5, expand=True)
-
-        refresh_ports_button = ttk.Button(port_frame, text="Refresh", command=self.refresh_ports)
-        refresh_ports_button.pack(side=tk.RIGHT, padx=5)
-
-        # Binary file selection frame
-        file_frame = ttk.LabelFrame(main_frame, text="Select Binary Files", padding="10")
-        file_frame.pack(fill=tk.BOTH, pady=10)
-
-        self.create_file_selection(file_frame, "Main Binary File:", "bin_combo", "Browse Main Binary")
-        self.create_file_selection(file_frame, "Bootloader File:", "bootloader_combo", "Browse Bootloader")
-        self.create_file_selection(file_frame, "Partition File:", "partition_combo", "Browse Partition")
+        # Binary file selection
+        file_group = QGroupBox("Select Binary Files")
+        file_layout = QVBoxLayout(file_group)
+        self.bootloader_combo = self.create_file_selection(file_layout, "Bootloader:")
+        self.partition_combo = self.create_file_selection(file_layout, "Partitions:")
+        self.ota_data_combo = self.create_file_selection(file_layout, "OTA Data:")
+        self.bin_combo = self.create_file_selection(file_layout, "Application:")
+        main_layout.addWidget(file_group)
 
         # Flash button and progress bar
-        action_frame = ttk.Frame(main_frame, padding="10")
-        action_frame.pack(fill=tk.X, pady=10)
+        action_group = QGroupBox("Actions")
+        action_layout = QHBoxLayout(action_group)
+        self.flash_button = QPushButton("Flash ESP32")
+        self.flash_button.clicked.connect(self.flash_esp32)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)  # Indeterminate
+        self.progress_bar.hide()
+        action_layout.addWidget(self.flash_button)
+        action_layout.addWidget(self.progress_bar)
+        main_layout.addWidget(action_group)
 
-        self.flash_button = ttk.Button(action_frame, text="Flash ESP32", command=self.flash_esp32)
-        self.flash_button.pack(side=tk.LEFT, expand=True, padx=5)
-
-        self.progress_bar = ttk.Progressbar(action_frame, mode="indeterminate")
-        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        # Output console
+        output_group = QGroupBox("Output")
+        output_layout = QVBoxLayout(output_group)
+        self.output_console = QTextEdit()
+        self.output_console.setReadOnly(True)
+        self.output_console.setFont(QFont("Courier", 10))
+        output_layout.addWidget(self.output_console)
+        main_layout.addWidget(output_group)
 
         # Status label
-        self.status_label = ttk.Label(main_frame, text="", relief=tk.SUNKEN, anchor=tk.W)
-        self.status_label.pack(fill=tk.X, pady=5)
+        self.status_label = QLabel("Ready")
+        main_layout.addWidget(self.status_label)
 
-    def create_file_selection(self, parent_frame, label_text, attr_name, button_text):
-        row = ttk.Frame(parent_frame)
-        row.pack(fill=tk.X, pady=5)
+    def create_file_selection(self, parent_layout, label_text):
+        row_layout = QHBoxLayout()
+        label = QLabel(label_text)
+        label.setMinimumWidth(80)
+        combobox = QComboBox()
+        browse_button = QPushButton("Browse...")
+        
+        row_layout.addWidget(label)
+        row_layout.addWidget(combobox)
+        row_layout.addWidget(browse_button)
+        parent_layout.addLayout(row_layout)
 
-        label = ttk.Label(row, text=label_text)
-        label.pack(side=tk.LEFT, padx=5)
+        browse_button.clicked.connect(lambda: self.browse_file(combobox))
+        return combobox
 
-        combobox = ttk.Combobox(row, values=[], state="readonly", width=30)
-        combobox.pack(side=tk.LEFT, expand=True)
-
-        browse_button = ttk.Button(row, text=button_text, command=lambda: self.browse_file(attr_name))
-        browse_button.pack(side=tk.RIGHT, padx=5)
-
-        setattr(self, attr_name, combobox)
-
-    def browse_file(self, target_combo_attr):
-        file_path = filedialog.askopenfilename(filetypes=[("Binary Files", "*.bin")])
+    def browse_file(self, combobox):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Binary File", BIN_DIR, "Binary Files (*.bin)")
         if file_path:
-            combo = getattr(self, target_combo_attr)
-            combo['values'] = [file_path]
-            combo.set(file_path)
+            if combobox.findText(file_path) == -1:
+                 combobox.addItem(file_path)
+            combobox.setCurrentText(file_path)
 
+    @Slot()
     def refresh_ports(self):
         ports = serial.tools.list_ports.comports()
         port_list = [f"{port.device} - {port.description}" for port in ports]
-        current_selection = self.port_combo.get()
-        self.port_combo['values'] = port_list
+        current_selection = self.port_combo.currentText()
+        self.port_combo.clear()
+        self.port_combo.addItems(port_list)
         if current_selection in port_list:
-            self.port_combo.set(current_selection)
-        elif port_list:
-            self.port_combo.current(0)
-        else:
-            self.port_combo.set('')
+            self.port_combo.setCurrentText(current_selection)
 
     def refresh_bins(self):
         if not os.path.exists(BIN_DIR):
             os.makedirs(BIN_DIR)
-        files = os.listdir(BIN_DIR)
+        
+        files = [os.path.join(BIN_DIR, f) for f in os.listdir(BIN_DIR) if f.endswith('.bin')]
+        
+        app_bins = [f for f in files if 'bootloader' not in f.lower() and 'partition' not in f.lower() and 'boot_app0' not in f.lower()]
+        bootloader_bins = [f for f in files if 'bootloader' in f.lower()]
+        partition_bins = [f for f in files if 'partition' in f.lower()]
+        ota_data_bins = [f for f in files if 'boot_app0' in f.lower()]
 
-        # Application binary files (excluding bootloader and partition files)
-        app_bins = [os.path.join(BIN_DIR, f) for f in files if f.endswith('.bin') and 'bootloader' not in f.lower() and 'partition' not in f.lower()]
-        current_app_selection = self.bin_combo.get()
-        self.bin_combo['values'] = app_bins
-        if current_app_selection in app_bins:
-            self.bin_combo.set(current_app_selection)
-        elif app_bins:
-            self.bin_combo.current(0)
-        else:
-            self.bin_combo.set('')
+        self.update_combo_box(self.bin_combo, app_bins)
+        self.update_combo_box(self.bootloader_combo, bootloader_bins)
+        self.update_combo_box(self.partition_combo, partition_bins)
+        self.update_combo_box(self.ota_data_combo, ota_data_bins)
 
-        # Bootloader binary files
-        bootloader_bins = [os.path.join(BIN_DIR, f) for f in files if 'bootloader' in f.lower() and f.endswith('.bin')]
-        current_bootloader_selection = self.bootloader_combo.get()
-        self.bootloader_combo['values'] = bootloader_bins
-        if current_bootloader_selection in bootloader_bins:
-            self.bootloader_combo.set(current_bootloader_selection)
-        elif bootloader_bins:
-            self.bootloader_combo.current(0)
-        else:
-            self.bootloader_combo.set('')
+    def update_combo_box(self, combobox, items):
+        current_text = combobox.currentText()
+        combobox.clear()
+        combobox.addItems(items)
+        if current_text in items:
+            combobox.setCurrentText(current_text)
+        elif items:
+            combobox.setCurrentIndex(0)
 
-        # Partition binary files
-        partition_bins = [os.path.join(BIN_DIR, f) for f in files if 'partition' in f.lower() and f.endswith('.bin')]
-        current_partition_selection = self.partition_combo.get()
-        self.partition_combo['values'] = partition_bins
-        if current_partition_selection in partition_bins:
-            self.partition_combo.set(current_partition_selection)
-        elif partition_bins:
-            self.partition_combo.current(0)
-        else:
-            self.partition_combo.set('')
+    def start_port_monitor(self):
+        self.port_monitor_thread = QThread()
+        self.port_monitor = PortMonitor()
+        self.port_monitor.moveToThread(self.port_monitor_thread)
+        self.port_monitor.ports_changed.connect(self.refresh_ports)
+        self.port_monitor_thread.started.connect(self.port_monitor.run)
+        self.port_monitor_thread.start()
 
-    def dynamic_port_update(self):
-        previous_ports = set()
-        while True:
-            ports = set(serial.tools.list_ports.comports())
-            if ports != previous_ports:
-                self.root.after(0, self.refresh_ports)
-                previous_ports = ports
-            time.sleep(1)
+    def closeEvent(self, event):
+        self.port_monitor.stop()
+        self.port_monitor_thread.quit()
+        self.port_monitor_thread.wait()
+        
+        if self.esptool_thread and self.esptool_thread.isRunning():
+            self.esptool_worker.stop()
+            self.esptool_thread.quit()
+            self.esptool_thread.wait()
+
+        super().closeEvent(event)
 
     def flash_esp32(self):
-        selected_port_desc = self.port_combo.get()
-        selected_bin = self.bin_combo.get()
-        selected_bootloader_bin = self.bootloader_combo.get()
-        selected_partition_bin = self.partition_combo.get()
+        selected_port_desc = self.port_combo.currentText()
+        selected_bootloader = self.bootloader_combo.currentText()
+        selected_partition = self.partition_combo.currentText()
+        selected_ota_data = self.ota_data_combo.currentText()
+        selected_bin = self.bin_combo.currentText()
 
-        if not all([selected_port_desc, selected_bin, selected_bootloader_bin, selected_partition_bin]):
-            messagebox.showerror("Error", "All fields must be selected.")
+        if not all([selected_port_desc, selected_bootloader, selected_partition, selected_ota_data, selected_bin]):
+            QMessageBox.critical(self, "Error", "All binary files and a COM port must be selected.")
             return
 
-        self.flash_button.config(state=tk.DISABLED)
-        self.progress_bar.start()
+        self.flash_button.setEnabled(False)
+        self.progress_bar.show()
+        self.status_label.setText("Flashing in progress...")
+        self.output_console.clear()
 
-        threading.Thread(
-            target=self.run_esptool,
-            args=(
-                selected_port_desc.split(' - ')[0],
-                selected_bin,
-                selected_bootloader_bin,
-                selected_partition_bin
-            ),
-            daemon=True
-        ).start()
+        port = selected_port_desc.split(' - ')[0]
 
-    def run_esptool(self, port, app_bin_file, bootloader_file, partitions_file):
-        try:
-            self.update_status("Flashing in progress...")
-            time.sleep(2)  # Short delay to allow user to press the BOOT button
+        # Determine path to esptool
+        if getattr(sys, 'frozen', False):
+            # Running in a bundle
+            base_path = sys._MEIPASS
+            esptool_path = os.path.join(base_path, 'esptool')
+        else:
+            # Running in a normal Python environment
+            esptool_path = 'esptool'
+        
+        # Command arguments matching the Arduino IDE verbose output
+        esptool_args = [
+            esptool_path,
+            '--chip', 'esp32c3',
+            '--port', port,
+            '--baud', '921600',
+            '--before', 'default-reset',
+            '--after', 'hard-reset',
+            'write-flash',
+            '--flash-mode', 'keep',
+            '--flash-freq', 'keep',
+            '--flash-size', 'keep',
+            '-z',
+            '0x0', os.path.abspath(selected_bootloader),
+            '0x8000', os.path.abspath(selected_partition),
+            '0xe000', os.path.abspath(selected_ota_data),
+            '0x10000', os.path.abspath(selected_bin)
+        ]
+        
+        self.esptool_thread = QThread()
+        self.esptool_worker = EsptoolWorker(esptool_args)
+        self.esptool_worker.moveToThread(self.esptool_thread)
 
-            # Ensure file paths are absolute
-            app_bin_file = os.path.abspath(app_bin_file)
-            bootloader_file = os.path.abspath(bootloader_file)
-            partitions_file = os.path.abspath(partitions_file)
+        self.esptool_worker.output.connect(self.append_output)
+        self.esptool_worker.finished.connect(self.on_flash_finished)
+        self.esptool_thread.started.connect(self.esptool_worker.run)
+        
+        # Clean up thread and worker
+        self.esptool_worker.finished.connect(self.esptool_thread.quit)
+        self.esptool_worker.finished.connect(self.esptool_worker.deleteLater)
+        self.esptool_thread.finished.connect(self.esptool_thread.deleteLater)
 
-            # esptool command
-            esptool_args = [
-                '--chip', 'esp32',
-                '--port', port,
-                '--baud', '460800',
-                '--before', 'default_reset',
-                '--after', 'hard_reset',
-                'write_flash', '-z',
-                '0x1000', bootloader_file,
-                '0x8000', partitions_file,
-                '0x10000', app_bin_file
-            ]
+        self.esptool_thread.start()
 
-            esptool.main(esptool_args)
+    @Slot(str)
+    def append_output(self, text):
+        self.output_console.append(text)
 
-            self.update_status("Flashing completed successfully!")
-            messagebox.showinfo("Success", "Flashing completed successfully!")
+    @Slot(int)
+    def on_flash_finished(self, exit_code):
+        self.progress_bar.hide()
+        self.flash_button.setEnabled(True)
+        
+        if exit_code == 0:
+            self.status_label.setText("Flashing completed successfully!")
+            QMessageBox.information(self, "Success", "Flashing completed successfully!")
+        else:
+            self.status_label.setText("Flashing failed!")
+            QMessageBox.critical(self, "Error", "Flashing failed. Check the output console for details.")
 
-        except Exception as e:
-            self.update_status("An error occurred.")
-            messagebox.showerror("Error", f"An error occurred:\n{str(e)}")
-
-        finally:
-            self.progress_bar.stop()
-            self.flash_button.config(state=tk.NORMAL)
-            self.refresh_ports()
-            self.refresh_bins()
-
-    def update_status(self, message):
-        self.status_label.config(text=message)
+        self.refresh_ports()
+        self.refresh_bins()
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ESPFlasherApp(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    window = ESPFlasherApp()
+    window.show()
+    sys.exit(app.exec())
