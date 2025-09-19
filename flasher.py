@@ -30,13 +30,12 @@ class StdoutEmitter(QObject):
     def flush(self):
         pass
 
-# REVISED: Replace the old EsptoolWorker with this new version
 class EsptoolWorker(QObject):
     """
     Worker thread for running esptool as a Python library to avoid freezing the GUI.
     """
     output = Signal(str)
-    finished = Signal(int)  # Emits the exit code
+    finished = Signal(int)
 
     def __init__(self, args):
         super().__init__()
@@ -59,7 +58,6 @@ class EsptoolWorker(QObject):
         
         exit_code = 0
         try:
-            # Import esptool here, inside the thread's run method
             import esptool
             esptool.main(self.args)
         except SystemExit as e:
@@ -248,7 +246,6 @@ class ESPFlasherApp(QMainWindow):
 
         super().closeEvent(event)
 
-    # REVISED: Update flash_esp32 to call the new worker correctly
     def flash_esp32(self):
         selected_port_desc = self.port_combo.currentText()
         selected_bootloader = self.bootloader_combo.currentText()
@@ -267,8 +264,6 @@ class ESPFlasherApp(QMainWindow):
 
         port = selected_port_desc.split(' - ')[0]
 
-        # No longer need to determine the path to esptool.
-        # We just build the list of arguments for the esptool.main() function.
         esptool_args = [
             '--chip', 'esp32c3',
             '--port', port,
