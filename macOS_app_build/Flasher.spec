@@ -1,19 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from shutil import which
+# Add these imports to find the esptool data path
+import os
+import esptool
 
-# Find the esptool executable to bundle it
-esptool_path = which('esptool')
-if not esptool_path:
-    raise Exception("esptool not found in PATH. Please install it.")
+# Get the path where the esptool package is installed
+esptool_path = os.path.dirname(esptool.__file__)
+
+# REVISED: Define the full path to the 'targets' directory that esptool now uses
+esptool_targets_path = os.path.join(esptool_path, 'targets')
+
 
 a = Analysis(
     ['../flasher.py'],
     pathex=[],
-    # The binaries list no longer needs esptool
     binaries=[],
-    # Bundle assets like the icon, but not the 'bin' folder
-    datas=[('assets', 'assets')],
+    # REVISED: Add the esptool 'targets' directory to the 'datas' list
+    datas=[
+        ('assets', 'assets'),
+        (esptool_targets_path, 'esptool/targets')  # <-- THIS IS THE CORRECTED LINE
+    ],
     # Ensure PySide6 modules and esptool are included
     hiddenimports=['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'esptool'],
     hookspath=[],
