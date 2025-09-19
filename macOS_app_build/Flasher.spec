@@ -16,7 +16,7 @@ a = Analysis(
         ('assets', 'assets'),
         (esptool_targets_path, 'esptool/targets')
     ],
-    # Ensure PySide6 modules and esptool are included
+    # Include PySide6 modules and esptool
     hiddenimports=['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'esptool'],
     hookspath=[],
     hooksconfig={},
