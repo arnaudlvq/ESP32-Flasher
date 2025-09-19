@@ -1,13 +1,10 @@
-# -*- mode: python ; coding: utf-8 -*-
-
-# Add these imports to find the esptool data path
 import os
 import esptool
 
 # Get the path where the esptool package is installed
 esptool_path = os.path.dirname(esptool.__file__)
 
-# REVISED: Define the full path to the 'targets' directory that esptool now uses
+# Define the full path to the 'targets' directory that esptool uses
 esptool_targets_path = os.path.join(esptool_path, 'targets')
 
 
@@ -15,10 +12,9 @@ a = Analysis(
     ['../flasher.py'],
     pathex=[],
     binaries=[],
-    # REVISED: Add the esptool 'targets' directory to the 'datas' list
     datas=[
         ('assets', 'assets'),
-        (esptool_targets_path, 'esptool/targets')  # <-- THIS IS THE CORRECTED LINE
+        (esptool_targets_path, 'esptool/targets')
     ],
     # Ensure PySide6 modules and esptool are included
     hiddenimports=['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'esptool'],
