@@ -28,8 +28,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    exclude_binaries=True,
+    a.binaries,
+    a.datas,
     name='Flasher',
     debug=False,
     bootloader_ignore_signals=False,
@@ -42,17 +42,8 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='Flasher',
-)
 app = BUNDLE(
-    coll,
+    exe,
     name='Flasher.app',
     icon='assets/icon.icns',
     bundle_identifier=None,
