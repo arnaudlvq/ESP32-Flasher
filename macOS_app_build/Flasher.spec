@@ -10,12 +10,12 @@ if not esptool_path:
 a = Analysis(
     ['../flasher.py'],
     pathex=[],
-    # Bundle the esptool executable
-    binaries=[(esptool_path, '.')],
+    # The binaries list no longer needs esptool
+    binaries=[],
     # Bundle assets like the icon, but not the 'bin' folder
     datas=[('assets', 'assets')],
-    # Ensure PySide6 modules are included
-    hiddenimports=['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets'],
+    # Ensure PySide6 modules and esptool are included
+    hiddenimports=['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'esptool'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -28,8 +28,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
+    [],
+    exclude_binaries=True,
     name='Flasher',
     debug=False,
     bootloader_ignore_signals=False,
@@ -42,8 +42,17 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-app = BUNDLE(
+coll = COLLECT(
     exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='Flasher',
+)
+app = BUNDLE(
+    coll,
     name='Flasher.app',
     icon='assets/icon.icns',
     bundle_identifier=None,

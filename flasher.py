@@ -2,7 +2,6 @@ import sys
 import os
 import time
 import serial.tools.list_ports
-import subprocess
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGroupBox, QLabel, QComboBox, QPushButton, QProgressBar, QMessageBox,
@@ -22,9 +21,19 @@ else:
 
 BIN_DIR = os.path.join(base_path, 'bin')  # Directory where the binary files are located
 
+class StdoutEmitter(QObject):
+    textWritten = Signal(str)
+
+    def write(self, text):
+        self.textWritten.emit(str(text))
+
+    def flush(self):
+        pass
+
+# REVISED: Replace the old EsptoolWorker with this new version
 class EsptoolWorker(QObject):
     """
-    Worker thread for running esptool as a subprocess to avoid freezing the GUI.
+    Worker thread for running esptool as a Python library to avoid freezing the GUI.
     """
     output = Signal(str)
     finished = Signal(int)  # Emits the exit code
@@ -32,45 +41,43 @@ class EsptoolWorker(QObject):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self._is_running = True
 
     def run(self):
         """
-        Executes the esptool command in a subprocess.
+        Executes the esptool command by calling its main function and
+        redirecting stdout to capture output in real-time.
         """
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        
+        emitter = StdoutEmitter()
+        # Connect the emitter's signal to the worker's output signal
+        emitter.textWritten.connect(lambda text: self.output.emit(text.strip()))
+
+        sys.stdout = emitter
+        sys.stderr = emitter
+        
+        exit_code = 0
         try:
-            # Start the subprocess
-            self.process = subprocess.Popen(
-                self.args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-            )
-
-            # Read output line by line in real-time
-            for line in iter(self.process.stdout.readline, ''):
-                if not self._is_running:
-                    self.process.terminate()
-                    break
-                self.output.emit(line.strip())
-            
-            self.process.stdout.close()
-            return_code = self.process.wait()
-            self.finished.emit(return_code)
-
-        except FileNotFoundError:
-            self.output.emit("Error: 'esptool' command not found.")
-            self.output.emit("Please ensure esptool is installed in your Python environment.")
-            self.finished.emit(1)
+            # Import esptool here, inside the thread's run method
+            import esptool
+            esptool.main(self.args)
+        except SystemExit as e:
+            # esptool calls sys.exit() on completion. 0 is success.
+            exit_code = e.code if e.code is not None else 0
         except Exception as e:
-            self.output.emit(f"An error occurred while running esptool:\n{str(e)}")
-            self.finished.emit(1)
+            # Print any other exceptions to our redirected output
+            print(f"An error occurred while running esptool:\n{str(e)}")
+            exit_code = 1
+        finally:
+            # Always restore the original stdout/stderr
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+
+        self.finished.emit(exit_code)
 
     def stop(self):
-        """Stops the running process."""
-        self._is_running = False
+        pass
 
 
 class PortMonitor(QObject):
@@ -233,13 +240,15 @@ class ESPFlasherApp(QMainWindow):
         self.port_monitor_thread.quit()
         self.port_monitor_thread.wait()
         
+        # The esptool function call cannot be forcefully stopped.
+        # We just wait for the thread to finish its work if it's running.
         if self.esptool_thread and self.esptool_thread.isRunning():
-            self.esptool_worker.stop()
             self.esptool_thread.quit()
             self.esptool_thread.wait()
 
         super().closeEvent(event)
 
+    # REVISED: Update flash_esp32 to call the new worker correctly
     def flash_esp32(self):
         selected_port_desc = self.port_combo.currentText()
         selected_bootloader = self.bootloader_combo.currentText()
@@ -258,24 +267,15 @@ class ESPFlasherApp(QMainWindow):
 
         port = selected_port_desc.split(' - ')[0]
 
-        # Determine path to esptool
-        if getattr(sys, 'frozen', False):
-            # Running in a bundle
-            base_path = sys._MEIPASS
-            esptool_path = os.path.join(base_path, 'esptool')
-        else:
-            # Running in a normal Python environment
-            esptool_path = 'esptool'
-        
-        # Command arguments matching the Arduino IDE verbose output
+        # No longer need to determine the path to esptool.
+        # We just build the list of arguments for the esptool.main() function.
         esptool_args = [
-            esptool_path,
             '--chip', 'esp32c3',
             '--port', port,
             '--baud', '921600',
             '--before', 'default-reset',
             '--after', 'hard-reset',
-            'write-flash',
+            'write_flash',
             '--flash-mode', 'keep',
             '--flash-freq', 'keep',
             '--flash-size', 'keep',
